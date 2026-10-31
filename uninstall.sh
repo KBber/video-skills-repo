@@ -27,7 +27,21 @@ if [ ! -f "$MANIFEST" ]; then
 fi
 
 # 每个技能的 installedPath 第一段 = 该技能独占的顶层目录
-TARGETS="$(python3 - "$MANIFEST" "$SKILLS_DIR" <<'PY'
+# 注意：Windows 的 Git Bash 里 python3 可能只是 Microsoft Store 的占位别名，
+# 直接调用会失败，所以这里要真正跑一次 import json 验证。
+PY=""
+for cand in python3 python; do
+  if command -v "$cand" >/dev/null 2>&1 && "$cand" -c "import json" >/dev/null 2>&1; then
+    PY="$cand"
+    break
+  fi
+done
+if [ -z "$PY" ]; then
+  echo "需要 Python 才能读取 manifest.json，请先安装 Python 3。" >&2
+  exit 1
+fi
+
+TARGETS="$("$PY" - "$MANIFEST" "$SKILLS_DIR" <<'PY'
 import json, os, sys
 m = json.load(open(sys.argv[1], encoding='utf-8'))
 skills_dir = sys.argv[2]

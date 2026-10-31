@@ -37,9 +37,23 @@ REPO_ROOT=""
 TMPDIR_REPO=""
 
 step() { printf '[%-4s] %s  %s\n' "$1" "$2" "$3"; }
-ok()   { step OK "$2" "$3"; }
-warn() { step WARN "$2" "$3"; }
-fail() { step FAIL "$2" "$3"; }
+ok()   { step OK   "$1" "$2"; }
+warn() { step WARN "$1" "$2"; }
+fail() { step FAIL "$1" "$2"; }
+
+# 递归数文件。不用 find：Windows 的 Git Bash 里 find 可能命中 system32\find.exe（文本搜索工具）
+count_files() {
+  local dir="$1" n=0 e
+  for e in "$dir"/*; do
+    [ -e "$e" ] || continue
+    if [ -d "$e" ]; then
+      n=$((n + $(count_files "$e")))
+    else
+      n=$((n + 1))
+    fi
+  done
+  printf '%s' "$n"
+}
 
 echo
 echo "=== 视频 Skills 一键部署 ==="
@@ -48,8 +62,13 @@ echo "仓库:     $REPO ($BRANCH)"
 echo
 
 # ---------- 0. 定位仓库内容 ----------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -d "$SCRIPT_DIR/skills" ]; then
+# 只有当脚本本身是一个真实文件、且同目录下同时存在 skills/ 与 manifest.json 时，
+# 才算「本地模式」；`curl ... | bash` 这种管道执行一律走远程模式。
+SCRIPT_DIR=""
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR/skills" ] && [ -f "$SCRIPT_DIR/manifest.json" ]; then
   REPO_ROOT="$SCRIPT_DIR"
   ok "获取仓库内容" "本地模式: $REPO_ROOT"
 else
@@ -67,9 +86,25 @@ else
   else
     curl -fsSL "$TAR_URL" | tar -xz -C "$TMPDIR_REPO"
   fi
-  # 取解压后含 skills/ 的那一层作为仓库根
-  REPO_ROOT="$(find "$TMPDIR_REPO" -maxdepth 2 -mindepth 1 -type d -name skills -printf '%h\n' 2>/dev/null | head -1)"
-  [ -n "$REPO_ROOT" ] || REPO_ROOT="$(find "$TMPDIR_REPO" -maxdepth 1 -mindepth 1 -type d | head -1)"
+  # 取解压后的仓库根：优先含 skills/ 且含 manifest.json 的那一层
+  # （GitHub 的归档会多套一层 <repo>-<branch>/，镜像站可能直接是仓库根，两种都要认）
+  REPO_ROOT=""
+  for d in "$TMPDIR_REPO" "$TMPDIR_REPO"/*/; do
+    d="${d%/}"
+    if [ -d "$d/skills" ] && [ -f "$d/manifest.json" ]; then
+      REPO_ROOT="$d"
+      break
+    fi
+  done
+  if [ -z "$REPO_ROOT" ]; then
+    for d in "$TMPDIR_REPO"/*/; do
+      d="${d%/}"
+      if [ -d "$d/skills" ]; then
+        REPO_ROOT="$d"
+        break
+      fi
+    done
+  fi
   [ -n "$REPO_ROOT" ] || { fail "获取仓库内容" "解压后未找到仓库目录"; exit 1; }
   ok "获取仓库内容" "已解压到 $REPO_ROOT"
 fi
@@ -88,7 +123,7 @@ for group in skills plugins; do
     name="$(basename "$item")"
     mkdir -p "$SKILLS_DIR/$name"
     cp -R "$item." "$SKILLS_DIR/$name/"
-    n="$(find "$SKILLS_DIR/$name" -type f | wc -l | tr -d ' ')"
+    n="$(count_files "$SKILLS_DIR/$name")"
     ok "复制 $name" "$n 个文件 -> $SKILLS_DIR/$name"
   done
 done

@@ -34,7 +34,7 @@ desc_of() {
 }
 
 FOUND=()
-declare -A FOUND_PATH
+FOUND_PATH=()
 
 scan() {
   local dir="$1" is_top="$2"
@@ -46,7 +46,7 @@ scan() {
       local n
       n="$(name_of "$dir/SKILL.md" "$dir")"
       FOUND+=("$n")
-      FOUND_PATH["$n"]="$dir/SKILL.md"
+      FOUND_PATH+=("$dir/SKILL.md")
     fi
     return 0
   fi
@@ -67,7 +67,7 @@ scan() {
         local n
         n="$(name_of "$f" "$dir")"
         FOUND+=("$n")
-        FOUND_PATH["$n"]="$f"
+        FOUND_PATH+=("$f")
       fi
     fi
   done
@@ -76,11 +76,21 @@ scan() {
 scan "$SKILLS_DIR" 1
 
 # 与 manifest 比对
+# 注意：Windows 的 Git Bash 里 python3 可能只是 Microsoft Store 的占位别名，
+# 直接调用会失败，所以这里要真正跑一次 import json 验证。
+PY=""
+for cand in python3 python; do
+  if command -v "$cand" >/dev/null 2>&1 && "$cand" -c "import json" >/dev/null 2>&1; then
+    PY="$cand"
+    break
+  fi
+done
+
 EXPECTED_COUNT=0
 MISSING=""
 PATH_MISSING=""
-if [ -f "$SCRIPT_DIR/manifest.json" ] && command -v python3 >/dev/null 2>&1; then
-  REPORT="$(python3 - "$SCRIPT_DIR/manifest.json" "$SKILLS_DIR" ${FOUND[@]+"${FOUND[@]}"} <<'PY'
+if [ -n "$PY" ] && [ -f "$SCRIPT_DIR/manifest.json" ]; then
+  REPORT="$("$PY" - "$SCRIPT_DIR/manifest.json" "$SKILLS_DIR" ${FOUND[@]+"${FOUND[@]}"} <<'PY'
 import json, os, sys
 m = json.load(open(sys.argv[1], encoding='utf-8'))
 skills_dir = sys.argv[2]
@@ -102,13 +112,17 @@ PY
   EXPECTED_COUNT="$(printf '%s\n' "$REPORT" | sed -n 's/^expected=//p')"
   MISSING="$(printf '%s\n' "$REPORT" | sed -n 's/^missing=//p')"
   PATH_MISSING="$(printf '%s\n' "$REPORT" | sed -n 's/^paths=//p')"
+elif [ -f "$SCRIPT_DIR/manifest.json" ]; then
+  echo "提示：没有可用的 Python，跳过与 manifest.json 的比对（只做扫描）" >&2
 fi
 
 if [ "$JSON" = "1" ]; then
   printf '{"skillsDir":"%s","count":%s,"skills":[' "$SKILLS_DIR" "${#FOUND[@]}"
-  for i in "${!FOUND[@]}"; do
+  i=0
+  for n in "${FOUND[@]}"; do
     [ $i -gt 0 ] && printf ','
-    printf '{"name":"%s","path":"%s"}' "${FOUND[$i]}" "${FOUND_PATH[${FOUND[$i]}]}"
+    printf '{"name":"%s","path":"%s"}' "$n" "${FOUND_PATH[$i]}"
+    i=$((i + 1))
   done
   printf '],"expected":%s,"missing":"%s","pathsMissing":"%s"}\n' \
     "${EXPECTED_COUNT:-0}" "$MISSING" "$PATH_MISSING"
@@ -130,9 +144,11 @@ if [ -n "$PATH_MISSING" ]; then
   printf '%s\n' "$PATH_MISSING" | sed 's/; /\n  /g'
 fi
 echo
+i=0
 for n in "${FOUND[@]}"; do
   echo "  $n"
-  echo "    ${FOUND_PATH[$n]}"
+  echo "    ${FOUND_PATH[$i]}"
+  i=$((i + 1))
 done
 echo
 [ -z "$MISSING" ] && [ -z "$PATH_MISSING" ] && exit 0 || exit 1

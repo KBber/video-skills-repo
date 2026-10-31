@@ -72,9 +72,11 @@ Write-Host "仓库:     $Repo ($Branch)"
 Write-Host ""
 
 # ---------- 0. 定位仓库内容（本地模式 or 远程模式） ----------
+# 只有当脚本本身是一个真实文件、且同目录下同时存在 skills\ 与 manifest.json 时，
+# 才算「本地模式」；`iwr ... | iex` 这种管道执行一律走远程模式。
 $scriptDir = ''
 try { $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path } catch { }
-if ($scriptDir -and (Test-Path -LiteralPath (Join-Path $scriptDir 'skills'))) {
+if ($scriptDir -and (Test-Path -LiteralPath (Join-Path $scriptDir 'skills')) -and (Test-Path -LiteralPath (Join-Path $scriptDir 'manifest.json'))) {
     $repoRoot = $scriptDir
     Write-Step '获取仓库内容' 'OK' "本地模式: $repoRoot"
 }
@@ -114,13 +116,18 @@ else {
         exit 1
     }
     Expand-Archive -LiteralPath $zip -DestinationPath $tempRoot -Force
-    # 取解压后含 skills\ 的那一层作为仓库根
+    # 取解压后的仓库根：优先含 skills\ 且含 manifest.json 的那一层
+    # （GitHub 的归档会多套一层 <repo>-<branch>/，镜像站可能直接是仓库根，两种都要认）
     $repoRoot = ''
-    $cands = @(Get-ChildItem -LiteralPath $tempRoot -Directory -ErrorAction SilentlyContinue)
+    $cands = @($tempRoot) + @(Get-ChildItem -LiteralPath $tempRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
     foreach ($c in $cands) {
-        if (Test-Path -LiteralPath (Join-Path $c.FullName 'skills')) { $repoRoot = $c.FullName; break }
+        if ((Test-Path -LiteralPath (Join-Path $c 'skills')) -and (Test-Path -LiteralPath (Join-Path $c 'manifest.json'))) { $repoRoot = $c; break }
     }
-    if (-not $repoRoot -and $cands.Count -gt 0) { $repoRoot = $cands[0].FullName }
+    if (-not $repoRoot) {
+        foreach ($c in $cands) {
+            if (Test-Path -LiteralPath (Join-Path $c 'skills')) { $repoRoot = $c; break }
+        }
+    }
     if (-not $repoRoot) { Write-Step '获取仓库内容' 'FAIL' '解压后未找到仓库目录'; exit 1 }
     Write-Step '获取仓库内容' 'OK' "已解压到 $repoRoot"
 }
