@@ -65,7 +65,20 @@ function Write-Step($name, $status, $detail) {
     Write-Host ("[{0,-4}] {1}  {2}" -f $status, $name, $detail) -ForegroundColor $color
 }
 
-# 优先用 curl.exe 下载：PowerShell 5.1 的 HttpWebRequest 在部分网络/代理环境下
+# 原生命令的 stderr 在 $ErrorActionPreference='Stop' 下会被 PowerShell 当成终止性错误
+# （NativeCommandError）——例如 pip 打印一行 "WARNING: Retrying ..." 就会直接中断安装。
+# 所以跑原生命令时临时放宽策略，结束后按退出码判断成败。
+function Invoke-NativeCmd([scriptblock]$cmd) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $cmd 2>&1
+        return [pscustomobject]@{ Output = @($out); ExitCode = $LASTEXITCODE }
+    }
+    finally { $ErrorActionPreference = $prev }
+}
+
+# curl 优先：PowerShell 5.1 的 HttpWebRequest 在部分网络/代理环境下
 # 会 TLS 握手中断（"基础连接已经关闭"），curl 的 schannel 后端更稳。
 # --retry-all-errors 需要 curl >= 7.71。
 function Get-CurlExtras {
@@ -123,8 +136,8 @@ else {
                     $curlArgs = @('-fsSL') + $curlExtras + @('--connect-timeout', '20', '-o', $zip)
                     if ($dlHeaders.Count -gt 0) { $curlArgs += @('-H', "Authorization: $($dlHeaders['Authorization'])") }
                     $curlArgs += $u
-                    & curl.exe @curlArgs
-                    if ($LASTEXITCODE -ne 0) { throw "curl 退出码 $LASTEXITCODE" }
+                    $curlRes = Invoke-NativeCmd { & curl.exe @curlArgs }
+                    if ($curlRes.ExitCode -ne 0) { throw "curl 退出码 $($curlRes.ExitCode)" }
                 }
                 elseif ($dlHeaders.Count -gt 0) { Invoke-WebRequest -Uri $u -OutFile $zip -TimeoutSec 300 -UseBasicParsing -Headers $dlHeaders }
                 else { Invoke-WebRequest -Uri $u -OutFile $zip -TimeoutSec 300 -UseBasicParsing }
@@ -209,7 +222,7 @@ if (-not $SkipDeps) {
         if ($major -ge 22) { Write-Step 'Node.js' 'OK' $nv } else { Write-Step 'Node.js' 'WARN' "$nv 低于 22，HyperFrames 需升级" }
     }
     $ff = Get-Command ffmpeg -ErrorAction SilentlyContinue; $fp = Get-Command ffprobe -ErrorAction SilentlyContinue
-    if ($ff -and $fp) { Write-Step 'FFmpeg' 'OK' ((ffmpeg -version 2>&1 | Select-Object -First 1) -replace '\s+$','') }
+    if ($ff -and $fp) { Write-Step 'FFmpeg' 'OK' (((Invoke-NativeCmd { ffmpeg -version }).Output | Select-Object -First 1) -replace '\s+$','') }
     else { Write-Step 'FFmpeg' 'FAIL' '未找到 ffmpeg / ffprobe，视频处理必需（winget install Gyan.FFmpeg）' }
 
     $py = Get-Command python -ErrorAction SilentlyContinue
@@ -222,14 +235,16 @@ if (-not $SkipDeps) {
             & python -m venv (Join-Path $vu '.venv')
         }
         if (Test-Path -LiteralPath $venvPy) {
-            & $venvPy -m pip install --quiet --upgrade pip 2>&1 | Out-Null
-            & $venvPy -m pip install --quiet -e $vu 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                & $venvPy -c "import requests,numpy,librosa,matplotlib,PIL" 2>&1 | Out-Null
-                if ($LASTEXITCODE -eq 0) { Write-Step 'video-use 依赖' 'OK' "venv: $venvPy" }
+            (Invoke-NativeCmd { & $venvPy -m pip install --quiet --upgrade pip }).Output | Out-Null
+            $pipRes = Invoke-NativeCmd { & $venvPy -m pip install --quiet -e $vu }
+            $pipRes.Output | Out-Null
+            if ($pipRes.ExitCode -eq 0) {
+                $impRes = Invoke-NativeCmd { & $venvPy -c "import requests,numpy,librosa,matplotlib,PIL" }
+                $impRes.Output | Out-Null
+                if ($impRes.ExitCode -eq 0) { Write-Step 'video-use 依赖' 'OK' "venv: $venvPy" }
                 else { Write-Step 'video-use 依赖' 'WARN' '部分依赖导入失败，可稍后手动 pip install -e' }
             }
-            else { Write-Step 'video-use 依赖' 'FAIL' "pip install -e 失败，退出码 $LASTEXITCODE" }
+            else { Write-Step 'video-use 依赖' 'FAIL' "pip install -e 失败，退出码 $($pipRes.ExitCode)" }
         }
         else { Write-Step 'video-use 依赖' 'FAIL' 'venv 创建失败' }
     }
@@ -242,14 +257,14 @@ if (-not $SkipRuntime -and -not $SkipBun) {
         $winget = Get-Command winget -ErrorAction SilentlyContinue
         if ($winget) {
             Write-Host '  · 通过 winget 安装 Bun ...' -ForegroundColor DarkGray
-            & winget install --id Oven-sh.Bun -e --accept-source-agreements --accept-package-agreements --disable-interactivity 2>&1 | Out-Null
+            (Invoke-NativeCmd { & winget install --id Oven-sh.Bun -e --accept-source-agreements --accept-package-agreements --disable-interactivity }).Output | Out-Null
         }
         if (-not (Test-Path -LiteralPath $bunExe)) {
             $npm = Get-Command npm -ErrorAction SilentlyContinue
             if ($npm) {
                 Write-Host '  · 通过 npm 官方平台包安装 Bun ...' -ForegroundColor DarkGray
-                & npm install -g @oven/bun-windows-x64 2>&1 | Out-Null
-                $root = (& npm root -g 2>&1 | Select-Object -First 1)
+                (Invoke-NativeCmd { & npm install -g @oven/bun-windows-x64 }).Output | Out-Null
+                $root = ((Invoke-NativeCmd { & npm root -g }).Output | Select-Object -First 1)
                 $cand = Join-Path $root '@oven\bun-windows-x64\bin\bun.exe'
                 if (Test-Path -LiteralPath $cand) {
                     New-Item -ItemType Directory -Force -Path $bunDir | Out-Null
@@ -282,12 +297,12 @@ if (-not $SkipRuntime -and -not $SkipBun) {
                 [Environment]::SetEnvironmentVariable('Path', ($userPath.TrimEnd(';') + ';' + $bunDir).TrimStart(';'), 'User')
             }
             if ($env:Path -notlike "*$bunDir*") { $env:Path = $env:Path + ';' + $bunDir }
-            Write-Step 'Bun' 'OK' "$((& $bunExe --version 2>&1 | Select-Object -First 1)) -> $bunExe"
+            Write-Step 'Bun' 'OK' "$(((Invoke-NativeCmd { & $bunExe --version }).Output | Select-Object -First 1)) -> $bunExe"
         }
         else { Write-Step 'Bun' 'FAIL' '未能安装 Bun，Video Cut Runtime 将无法激活' }
     }
     else {
-        Write-Step 'Bun' 'OK' "$((& $bunExe --version 2>&1 | Select-Object -First 1)) -> $bunExe"
+        Write-Step 'Bun' 'OK' "$(((Invoke-NativeCmd { & $bunExe --version }).Output | Select-Object -First 1)) -> $bunExe"
     }
 }
 
@@ -298,8 +313,9 @@ if (-not $SkipRuntime) {
     if (Test-Path -LiteralPath $ensure) {
         if ($env:Path -notlike "*$bunDir*") { $env:Path = $env:Path + ';' + $bunDir }
         Write-Host '  · 激活 chengfeng-videocut Runtime ...' -ForegroundColor DarkGray
-        $out = & node $ensure --install-if-missing --json 2>&1
-        if ($LASTEXITCODE -eq 0) { Write-Step 'Video Cut Runtime' 'OK' '已安装并激活' }
+        $rtRes = Invoke-NativeCmd { & node $ensure --install-if-missing --json }
+        $out = $rtRes.Output
+        if ($rtRes.ExitCode -eq 0) { Write-Step 'Video Cut Runtime' 'OK' '已安装并激活' }
         else { Write-Step 'Video Cut Runtime' 'FAIL' (($out | Select-Object -Last 1) | Out-String).Trim() }
     }
     else { Write-Step 'Video Cut Runtime' 'FAIL' "找不到 $ensure" }
