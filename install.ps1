@@ -65,6 +65,22 @@ function Write-Step($name, $status, $detail) {
     Write-Host ("[{0,-4}] {1}  {2}" -f $status, $name, $detail) -ForegroundColor $color
 }
 
+# 优先用 curl.exe 下载：PowerShell 5.1 的 HttpWebRequest 在部分网络/代理环境下
+# 会 TLS 握手中断（"基础连接已经关闭"），curl 的 schannel 后端更稳。
+# --retry-all-errors 需要 curl >= 7.71。
+function Get-CurlExtras {
+    if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) { return $null }
+    try {
+        $v = (& curl.exe --version 2>$null | Select-Object -First 1)
+        if ($v -match 'curl (\d+)\.(\d+)') {
+            $maj = [int]$Matches[1]; $min = [int]$Matches[2]
+            if ($maj -gt 7 -or ($maj -eq 7 -and $min -ge 71)) { return @('--retry', '3', '--retry-all-errors') }
+        }
+    }
+    catch { }
+    return @('--retry', '3')
+}
+
 Write-Host ""
 Write-Host "=== 视频 Skills 一键部署 ===" -ForegroundColor Cyan
 Write-Host "数据目录: $DataDir"
@@ -98,14 +114,28 @@ else {
     if ($token) { $dlHeaders['Authorization'] = "Bearer $token" }
 
     $ok = $false
+    $curlExtras = Get-CurlExtras
     foreach ($u in $urls) {
-        try {
-            Write-Host "  · 下载 $u" -ForegroundColor DarkGray
-            if ($dlHeaders.Count -gt 0) { Invoke-WebRequest -Uri $u -OutFile $zip -TimeoutSec 300 -UseBasicParsing -Headers $dlHeaders }
-            else { Invoke-WebRequest -Uri $u -OutFile $zip -TimeoutSec 300 -UseBasicParsing }
-            if ((Get-Item -LiteralPath $zip).Length -gt 1000) { $ok = $true; break }
+        for ($try = 1; $try -le 3; $try++) {
+            try {
+                Write-Host "  · 下载 $u （第 $try 次）" -ForegroundColor DarkGray
+                if ($curlExtras) {
+                    $curlArgs = @('-fsSL') + $curlExtras + @('--connect-timeout', '20', '-o', $zip)
+                    if ($dlHeaders.Count -gt 0) { $curlArgs += @('-H', "Authorization: $($dlHeaders['Authorization'])") }
+                    $curlArgs += $u
+                    & curl.exe @curlArgs
+                    if ($LASTEXITCODE -ne 0) { throw "curl 退出码 $LASTEXITCODE" }
+                }
+                elseif ($dlHeaders.Count -gt 0) { Invoke-WebRequest -Uri $u -OutFile $zip -TimeoutSec 300 -UseBasicParsing -Headers $dlHeaders }
+                else { Invoke-WebRequest -Uri $u -OutFile $zip -TimeoutSec 300 -UseBasicParsing }
+                if ((Get-Item -LiteralPath $zip).Length -gt 1000) { $ok = $true; break }
+            }
+            catch {
+                Write-Host "    失败: $($_.Exception.Message)" -ForegroundColor DarkGray
+                Start-Sleep -Seconds 2
+            }
         }
-        catch { Write-Host "    失败: $($_.Exception.Message)" -ForegroundColor DarkGray }
+        if ($ok) { break }
     }
     if (-not $ok) {
         Write-Step '获取仓库内容' 'FAIL' "无法下载仓库 $Repo@$Branch"

@@ -81,11 +81,19 @@ else
     TAR_URL="https://codeload.github.com/$REPO/tar.gz/refs/heads/$BRANCH"
   fi
   TOKEN="${VIDEO_SKILLS_TOKEN:-${GITHUB_TOKEN:-}}"
-  if [ -n "$TOKEN" ]; then
-    curl -fsSL -H "Authorization: token $TOKEN" "$TAR_URL" | tar -xz -C "$TMPDIR_REPO"
-  else
-    curl -fsSL "$TAR_URL" | tar -xz -C "$TMPDIR_REPO"
+  # 先落盘再解包：curl | tar 在下载中断时会把残缺归档喂给 tar，错误难辨。
+  # --retry-all-errors 需要 curl >= 7.71
+  RETRY_ARGS="--retry 3"
+  if curl --version 2>/dev/null | head -1 | grep -qE 'curl (8\.|(7\.(7[1-9]|[89][0-9]|9[0-9])))'; then
+    RETRY_ARGS="--retry 3 --retry-all-errors"
   fi
+  TARBALL="$TMPDIR_REPO/repo.tar.gz"
+  if [ -n "$TOKEN" ]; then
+    curl -fsSL $RETRY_ARGS -H "Authorization: token $TOKEN" -o "$TARBALL" "$TAR_URL"
+  else
+    curl -fsSL $RETRY_ARGS -o "$TARBALL" "$TAR_URL"
+  fi
+  tar -xzf "$TARBALL" -C "$TMPDIR_REPO"
   # 取解压后的仓库根：优先含 skills/ 且含 manifest.json 的那一层
   # （GitHub 的归档会多套一层 <repo>-<branch>/，镜像站可能直接是仓库根，两种都要认）
   REPO_ROOT=""

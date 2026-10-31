@@ -18,13 +18,23 @@
 ### Windows（PowerShell 5.1+）
 
 ```powershell
+curl.exe -fsSL --retry 3 --retry-all-errors -o install.ps1 https://raw.githubusercontent.com/KBber/video-skills-repo/main/install.ps1; .\install.ps1
+```
+
+本机 TLS 正常的话，也可以直接管道执行：
+
+```powershell
 iwr -useb https://raw.githubusercontent.com/KBber/video-skills-repo/main/install.ps1 | iex
 ```
+
+> **为什么推荐先下载再执行**：PowerShell 5.1 的 `Invoke-WebRequest` 在部分网络/代理环境下会 TLS 握手中断
+> （报「基础连接已经关闭」），而 `curl.exe` 自带重试、能扛住抖动；
+> 下载到文件再执行还能避免「半截脚本被 `iex` 解析」这类难懂的报错。装完可删掉 `install.ps1`。
 
 ### macOS / Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KBber/video-skills-repo/main/install.sh | bash
+curl -fsSL --retry 3 --retry-all-errors https://raw.githubusercontent.com/KBber/video-skills-repo/main/install.sh | bash
 ```
 
 ### 克隆后本地执行
@@ -258,12 +268,12 @@ GitHub Actions 会在每次 push 时自动跑它，并顺带在 Ubuntu / Windows
 
 ```powershell
 $env:VIDEO_SKILLS_ZIP_URL = 'https://mirror.example.com/video-skills-repo.zip'
-iwr -useb https://raw.githubusercontent.com/KBber/video-skills-repo/main/install.ps1 | iex
+curl.exe -fsSL --retry 3 --retry-all-errors -o install.ps1 https://raw.githubusercontent.com/KBber/video-skills-repo/main/install.ps1; .\install.ps1
 ```
 
 ```bash
 VIDEO_SKILLS_TARBALL_URL=https://mirror.example.com/video-skills-repo.tar.gz \
-  bash <(curl -fsSL https://raw.githubusercontent.com/KBber/video-skills-repo/main/install.sh)
+  bash <(curl -fsSL --retry 3 https://raw.githubusercontent.com/KBber/video-skills-repo/main/install.sh)
 ```
 
 私有仓库请设置 `GITHUB_TOKEN`（或 `VIDEO_SKILLS_TOKEN`），安装器会带上 `Authorization` 头。
