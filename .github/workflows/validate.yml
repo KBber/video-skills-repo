@@ -1,0 +1,94 @@
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repo-check:
+    name: 仓库一致性
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: 校验 manifest 与技能目录
+        run: python3 tools/validate_skills.py
+
+      - name: 输出 JSON
+        run: python3 tools/validate_skills.py --json
+
+  smoke-unix:
+    name: 一键部署冒烟 · macOS/Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 本地模式安装
+        run: bash install.sh --data-dir "$RUNNER_TEMP/vskills" --skip-deps --skip-runtime
+
+      - name: 体检
+        run: bash verify.sh --data-dir "$RUNNER_TEMP/vskills"
+
+      - name: 远程模式安装（本地 HTTP 镜像，验证 tarball 下载链路）
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          tar -czf repo.tar.gz -C "$GITHUB_WORKSPACE" \
+            --exclude=.git --exclude='*.zip' .
+          mkdir -p mirror && mv repo.tar.gz mirror/
+          python3 -m http.server 8765 --directory mirror >/dev/null 2>&1 &
+          SRV=$!
+          sleep 2
+          VIDEO_SKILLS_TARBALL_URL="http://127.0.0.1:8765/repo.tar.gz" \
+            bash "$GITHUB_WORKSPACE/install.sh" --data-dir "$RUNNER_TEMP/vskills-remote" --skip-deps --skip-runtime
+          bash "$GITHUB_WORKSPACE/verify.sh" --data-dir "$RUNNER_TEMP/vskills-remote"
+          kill "$SRV" || true
+
+  smoke-windows:
+    name: 一键部署冒烟 · Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 本地模式安装
+        run: |
+          $d = Join-Path $env:RUNNER_TEMP 'vskills'
+          ./install.ps1 -DataDir $d -SkipDeps -SkipRuntime
+
+      - name: 体检
+        run: |
+          $d = Join-Path $env:RUNNER_TEMP 'vskills'
+          ./verify.ps1 -DataDir $d
+
+      - name: 远程模式安装（本地 HTTP 镜像，验证 zip 下载链路）
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ws = $env:GITHUB_WORKSPACE
+          $stage = Join-Path $env:RUNNER_TEMP 'mirror'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          $zip = Join-Path $stage 'repo.zip'
+          $items = Get-ChildItem -LiteralPath $ws -Force | Where-Object { $_.Name -ne '.git' }
+          Compress-Archive -Path $items.FullName -DestinationPath $zip -Force
+          $srv = Start-Job -ScriptBlock {
+            param($dir)
+            python -m http.server 8766 --directory $dir
+          } -ArgumentList $stage
+          Start-Sleep -Seconds 3
+          $env:VIDEO_SKILLS_ZIP_URL = 'http://127.0.0.1:8766/repo.zip'
+          $d = Join-Path $env:RUNNER_TEMP 'vskills-remote'
+          ./install.ps1 -DataDir $d -SkipDeps -SkipRuntime
+          ./verify.ps1 -DataDir $d
+          Stop-Job $srv -ErrorAction SilentlyContinue
+          Remove-Job $srv -Force -ErrorAction SilentlyContinue

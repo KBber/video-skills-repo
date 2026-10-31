@@ -1,0 +1,29 @@
+# 统一换行符：Windows 脚本用 CRLF，Unix 脚本与数据文件用 LF
+*.ps1    text eol=crlf
+*.sh     text eol=lf
+*.py     text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.json   text eol=lf
+*.md     text eol=lf
+*.txt    text eol=lf
+
+# 仓库自身的配置文件固定 LF
+.gitattributes    text eol=lf
+.gitignore        text eol=lf
+.gitmodules       text eol=lf
+LICENSE          text eol=lf
+NOTICE.md        text eol=lf
+LICENSE.txt      text eol=lf
+
+# 二进制资源
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.svg    text eol=lf
+*.ico    binary
+*.woff   binary
+*.woff2  binary
+*.mp3    binary
+*.mp4    binary

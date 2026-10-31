@@ -1,0 +1,29 @@
+# ---- 运行时产物 ----
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.log
+
+# ---- 本地密钥 ----
+.env
+.env.*
+!.env.example
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 打包临时物 ----
+dist/
+*.zip
+*.tar.gz
+verify-out/
+
+# ---- 上游自带的忽略文件（保留原样，但不让它们影响本仓库） ----
+plugins/chengfeng-videocut/node_modules/

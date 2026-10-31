@@ -1,0 +1,105 @@
+{
+  "bundle": "video-skills-repo",
+  "version": "1.2.0",
+  "generatedAt": "2026-10-31",
+  "installTarget": {
+    "dataDirDefault": "%USERPROFILE%\\.minimax",
+    "skillsSubdir": "skills",
+    "unixDataDirDefault": "~/.minimax"
+  },
+  "notes": [
+    "installedPath 为落地位置（相对 <dataDir>\\skills\\）；repoPath 为仓库内位置（相对仓库根）。",
+    "安装器把仓库的 skills\\* 与 plugins\\* 顶层条目复制到 <dataDir>\\skills\\，因此 installedPath 的第一段就是该技能独占的顶层目录。",
+    "Video Cut 的 7 个技能共用顶层目录 chengfeng-videocut（整插件落地），卸载按顶层目录整块删除。"
+  ],
+  "groups": [
+    {
+      "id": "hyperframes",
+      "title": "HyperFrames",
+      "label": "动效生成",
+      "upstream": "https://github.com/heygen-com/hyperframes",
+      "license": "Apache-2.0",
+      "cli": "npx hyperframes",
+      "skills": [
+        { "name": "hyperframes", "desc": "主技能：HTML→视频的合成契约与工作流", "installedPath": "hyperframes", "repoPath": "skills/hyperframes" },
+        { "name": "hyperframes-cli", "desc": "CLI 按任务分工：init/lint/validate/inspect/preview/render/publish", "installedPath": "hyperframes-cli", "repoPath": "skills/hyperframes-cli" },
+        { "name": "hyperframes-registry", "desc": "约 450 个现成动效块与组件", "installedPath": "hyperframes-registry", "repoPath": "skills/hyperframes-registry" },
+        { "name": "media-use", "desc": "取用或生成素材：音乐、音效、图片、Logo、配音、数字人", "installedPath": "media-use", "repoPath": "skills/media-use" },
+        { "name": "remotion-to-hyperframes", "desc": "把 Remotion 代码或素材迁到 HyperFrames 并逐帧校验", "installedPath": "remotion-to-hyperframes", "repoPath": "skills/remotion-to-hyperframes" }
+      ]
+    },
+    {
+      "id": "video-use",
+      "title": "Video Use",
+      "label": "素材后期",
+      "upstream": "https://github.com/browser-use/video-use",
+      "license": "MIT",
+      "cli": "python .venv/bin/python helpers/transcribe.py",
+      "skills": [
+        { "name": "video-use", "desc": "对话式剪辑：转录、剪切、调色、叠加动画、烧字幕", "installedPath": "video-use", "repoPath": "skills/video-use" }
+      ]
+    },
+    {
+      "id": "remotion",
+      "title": "Remotion",
+      "label": "批量视频",
+      "upstream": "https://github.com/remotion-dev/skills",
+      "license": "MIT",
+      "cli": "npx create-video@latest / npx remotion studio|render",
+      "skills": [
+        { "name": "remotion-best-practices", "desc": "总路由，按需求分发到下面各技能", "installedPath": "remotion-best-practices", "repoPath": "skills/remotion-best-practices" },
+        { "name": "remotion-create", "desc": "新建 Remotion 视频工程", "installedPath": "remotion-create", "repoPath": "skills/remotion-create" },
+        { "name": "remotion-markup", "desc": "React 标记与动效最佳实践", "installedPath": "remotion-markup", "repoPath": "skills/remotion-markup" },
+        { "name": "remotion-render", "desc": "渲染导出 MP4", "installedPath": "remotion-render", "repoPath": "skills/remotion-render" },
+        { "name": "remotion-captions", "desc": "字幕转录、显示与动效", "installedPath": "remotion-captions", "repoPath": "skills/remotion-captions" },
+        { "name": "remotion-multimedia", "desc": "浏览器内多媒体处理（裁剪/元数据/Mediabunny）", "installedPath": "remotion-multimedia", "repoPath": "skills/remotion-multimedia" },
+        { "name": "remotion-maps", "desc": "地图、路线、地理动效", "installedPath": "remotion-maps", "repoPath": "skills/remotion-maps" },
+        { "name": "remotion-interactivity", "desc": "Studio 内交互与回写代码", "installedPath": "remotion-interactivity", "repoPath": "skills/remotion-interactivity" },
+        { "name": "remotion-studio", "desc": "打开交互预览", "installedPath": "remotion-studio", "repoPath": "skills/remotion-studio" },
+        { "name": "remotion-saas", "desc": "用 Remotion 做应用/SaaS", "installedPath": "remotion-saas", "repoPath": "skills/remotion-saas" },
+        { "name": "remotion-docs", "desc": "查官方文档", "installedPath": "remotion-docs", "repoPath": "skills/remotion-docs" },
+        { "name": "remotion-upgrade", "desc": "升级 Remotion 与相关包", "installedPath": "remotion-upgrade", "repoPath": "skills/remotion-upgrade" }
+      ]
+    },
+    {
+      "id": "generative-media",
+      "title": "Generative Media",
+      "label": "多模态素材",
+      "upstream": "https://github.com/Lynricsy/HyperSkills",
+      "license": "MIT",
+      "cli": "纯 Markdown，无需本地运行时",
+      "skills": [
+        { "name": "generative-media", "desc": "图像/视频/语音/音乐生成与转录的通用管线规则", "installedPath": "generative-media", "repoPath": "skills/generative-media" }
+      ]
+    },
+    {
+      "id": "videocut",
+      "title": "Video Cut",
+      "label": "中文剪辑",
+      "upstream": "https://github.com/Ceeon/videocut-skills",
+      "license": "Apache-2.0",
+      "cli": "node <pluginRoot>/scripts/videocut-cli.cjs doctor --json",
+      "note": "必须保持插件结构：<dataDir>/skills/chengfeng-videocut/ 下含 scripts/、references/、.codex-plugin/、skills/。技能内部按「从 SKILL.md 向上两级 = 插件根」定位资源，改名或只复制单个技能目录会失效，因此必须整包安装。",
+      "skills": [
+        { "name": "chengfeng-cut", "desc": "剪口播：逐词转录、词典修字、扫口误重复、出删词账本并复核", "installedPath": "chengfeng-videocut/skills/chengfeng-cut", "repoPath": "plugins/chengfeng-videocut/skills/chengfeng-cut" },
+        { "name": "chengfeng-subtitle", "desc": "字幕：算剪后时间、按句分屏、词典纠错", "installedPath": "chengfeng-videocut/skills/chengfeng-subtitle", "repoPath": "plugins/chengfeng-videocut/skills/chengfeng-subtitle" },
+        { "name": "chengfeng-visual", "desc": "画面/分镜：在录屏上盖 HTML 层", "installedPath": "chengfeng-videocut/skills/chengfeng-visual", "repoPath": "plugins/chengfeng-videocut/skills/chengfeng-visual" },
+        { "name": "chengfeng-export", "desc": "导出：账本切片段+推近+字幕+画面一次性烧成 mp4", "installedPath": "chengfeng-videocut/skills/chengfeng-export", "repoPath": "plugins/chengfeng-videocut/skills/chengfeng-export" },
+        { "name": "chengfeng-videocut-workbench", "desc": "工作台时间线操作：插入/删除/拆分/移动/换比例", "installedPath": "chengfeng-videocut/skills/chengfeng-videocut-workbench", "repoPath": "plugins/chengfeng-videocut/skills/chengfeng-videocut-workbench" },
+        { "name": "chengfeng-check-updates", "desc": "环境总管：就绪检查、Runtime 安装与体检", "installedPath": "chengfeng-videocut/skills/chengfeng-check-updates", "repoPath": "plugins/chengfeng-videocut/skills/chengfeng-check-updates" },
+        { "name": "chengfeng-report-bug", "desc": "整理脱敏并上报 GitHub Issue", "installedPath": "chengfeng-videocut/skills/chengfeng-report-bug", "repoPath": "plugins/chengfeng-videocut/skills/chengfeng-report-bug" }
+      ]
+    }
+  ],
+  "runtimeRequirements": [
+    { "id": "node", "detail": "Node.js >= 22（HyperFrames 硬性要求）", "check": "node --version" },
+    { "id": "ffmpeg", "detail": "FFmpeg + FFprobe（视频处理硬性要求）", "check": "ffmpeg -version" },
+    { "id": "python", "detail": "Python >= 3.10（video-use 依赖）", "check": "python3 --version" },
+    { "id": "bun", "detail": "Bun >= 1.2（Video Cut Runtime 依赖）", "check": "bun --version" }
+  ],
+  "apiKeys": [
+    { "skill": "video-use", "name": "ELEVENLABS_API_KEY", "where": "<dataDir>/skills/video-use/.env", "get": "https://elevenlabs.io/app/settings/api-keys" },
+    { "skill": "videocut", "name": "火山引擎 API Key", "where": "chengfeng-videocut config set transcription.apiKey", "get": "https://console.volcengine.com/" },
+    { "skill": "generative-media", "name": "各 provider 的 API Key", "where": "按目标 provider 提供", "get": "见 references/ 各 provider 章节" }
+  ]
+}

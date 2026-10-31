@@ -1,0 +1,78 @@
+[
+  {
+    "skills": ["generative-media"],
+    "query": "Our art director approves prompts on his MacBook, then we re-run the approved list on the A100 box and the finals come out different. Even re-running just one prompt on the same box gives a different image than the batch did. Same seed every time. Make the renders reproducible.",
+    "files": ["evals/files/batch_variants.py"],
+    "expected_behavior": [
+      "Identifies the reused `Generator` as why a single prompt cannot be reproduced on its own: the generator's state advances with each call, so image N depends on the calls before it, and creates or reseeds a generator per image",
+      "States that a CPU generator and a CUDA generator produce different noise from the same seed, so reproducing across machines requires generating the latents on CPU and moving them to the device",
+      "Says that identical seed, device and code still do not guarantee bit-identical output — nondeterministic kernels, TF32 and algorithm selection all move the result — and reaches for the deterministic switch (`enable_full_determinism`) while naming its performance cost",
+      "Refuses to promise bit-identical parity between the MacBook (mps) and the A100, and proposes archiving the approved image bytes as the artefact of record instead",
+      "Pins the versions that silently change output — diffusers, the model weights revision, the scheduler — rather than treating the seed alone as the reproducibility contract",
+      "Notes that `torch.manual_seed` at the top is not what seeds the pipeline here, so it gives false confidence"
+    ]
+  },
+  {
+    "skills": ["generative-media"],
+    "query": "Legal blocked our re-staged catalogue images. They say the product in the generated photos is not the product we photographed, and compliance wants to know how a shopper can tell the image was AI-made. This is the job that produces them.",
+    "files": ["evals/files/restage_product.py"],
+    "expected_behavior": [
+      "States that the mask is a prompt-level hint, not a pixel-level crop: the model may alter pixels inside the protected area, so 'only the background changes' is not something the edit endpoint can promise",
+      "Gets the product pixels back deterministically — compositing the original photo over the generated background through an alpha matte — rather than tightening the prompt or refining the mask and hoping",
+      "Says provider provenance marking (SynthID, C2PA manifests) rides in the generated asset and must be preserved rather than removed",
+      "Flags the `sharp-cli resize` step as destroying that provenance, because image tools strip metadata by default, and keeps or re-signs the manifest through the resize",
+      "Provides a disclosure the shopper actually sees, not only stored metadata, because the requirement is that a person can tell",
+      "Persists the generation record — prompt, model version, request id, and the hash of the delivered bytes — so a specific published image can be traced back to the call that produced it",
+      "Does not propose stripping or spoofing the provenance metadata to make the compliance complaint go away"
+    ]
+  },
+  {
+    "skills": ["generative-media"],
+    "query": "Narrated lessons are broken: short lessons play fine, long ones fail or come out truncated, and the files that do get written will not open in the browser player. Fix the narration job.",
+    "files": ["evals/files/narrate_lessons.py"],
+    "expected_behavior": [
+      "Identifies that the response is raw PCM (24 kHz, 16-bit, mono) with no container, so naming the file `.wav` does not make it a WAV — a RIFF header has to be written or the bytes muxed",
+      "Assigns that containerisation and any resampling to deterministic tooling rather than expecting the speech endpoint to return a playable file",
+      "Splits long lessons against the endpoint's input limit, and splits on sentence or paragraph boundaries rather than a fixed character count so prosody does not break mid-clause",
+      "Handles continuity across chunks — same voice and style configuration on every request, and joined with controlled silence rather than concatenated back to back",
+      "Strips or converts the markdown before narration instead of sending raw markup to be read aloud",
+      "Discloses to the learner that the narration is synthetic, given these sit in the same list as human-recorded lessons",
+      "Does not treat the audio as reproducible from a seed"
+    ]
+  },
+  {
+    "skills": [],
+    "query": "This support answer function sometimes answers from the model's own knowledge instead of the articles we pass it, and the output format is inconsistent. Tighten it up.",
+    "files": ["evals/files/support_answer.py"],
+    "expected_behavior": [
+      "Does not read skills/generative-media/SKILL.md",
+      "Works on prompt structure, delimiting the retrieved articles as data, grounding/citation and provider-enforced structured output",
+      "Treats this as text-model application work rather than a media generation task"
+    ]
+  },
+  {
+    "skills": ["generative-media"],
+    "query": "Since the finals moved to FLUX.1-dev, the 10-step previews from evals/files/preview_flux.py come out as smeared mush, `--ays` dies with a ValueError, every run prints a deprecation warning, and previews got far slower. On top of that the seed the director approves on a preview never looks like the final render. Fix the preview path.",
+    "files": ["evals/files/preview_flux.py"],
+    "expected_behavior": [
+      "Identifies FLUX.1-dev as a flow-matching checkpoint whose shipped scheduler is `FlowMatchEulerDiscreteScheduler`, and says loading SDXL's DPM++ scheduler config onto it is the cause of the mush; keeps the checkpoint's default scheduler (or a flow-match-compatible one) for previews",
+      "If a scheduler is swapped at all, derives it with `from_config(pipe.scheduler.config)` from the pipeline's own config rather than loading another model's scheduler config with `from_pretrained`",
+      "Explains the `--ays` ValueError: custom `sigmas` only work when the scheduler's `set_timesteps` accepts them, and the SDXL Align-Your-Steps values belong to SDXL's noise schedule, so they are dropped for FLUX rather than forced through",
+      "Attributes the slowdown to `enable_full_determinism`, naming what it actually switches on beyond seeding (at least `CUDA_LAUNCH_BLOCKING=1` and `torch.use_deterministic_algorithms(True)`), removes it from the preview path, and moves the import to `diffusers.utils.torch_utils` wherever it is kept",
+      "Says a preview rendered with a different scheduler or step count follows a different trajectory, so an approved preview seed cannot reproduce the final unless scheduler, steps and guidance match; the generation record carries them",
+      "Uses a CPU `torch.Generator`, created per image, for seeds that must carry across runs or machines"
+    ]
+  },
+  {
+    "skills": ["generative-media"],
+    "query": "Two problems in media_jobs.py since we moved to the vendor's current-generation image and speech models. (1) Finance says our estimator over-budgets the 9:16 story covers: it bills them at the 2K rate because a taller frame 'crosses into the next tier', but last week's invoice for 4,000 covers rendered at 1K came in well under the estimate. Is the estimator right, and what should it be? (2) Every narration clip now starts with a click and the stitched lessons click at every paragraph joint, although ffprobe reports each file as a valid 24 kHz mono WAV. Fix both in media_jobs.py.",
+    "files": ["evals/files/media_jobs.py"],
+    "expected_behavior": [
+      "Says the estimator's tier rule is wrong: the size tier is requested explicitly (`image_size`) and every aspect ratio within a tier is billed the same fixed number of output tokens, so a 9:16 cover at 1K costs the same as a square one at 1K; removes the aspect-ratio bump so the estimate keys on the requested size tier alone",
+      "Keeps the estimate a pre-run calculation of count × fixed tokens for the tier × price (for last week, 4,000 × 1,120 output tokens at 1K), not something derived from the prompt or from pixel arithmetic",
+      "Explains the click: the current-generation model returns a complete WAV with a RIFF header for a non-streaming request, so `pcm_to_wav` wraps a second header around it and the inner 44-byte header plays as audio samples — a click at the start and at every joint — while the file still probes as valid",
+      "Decides whether to add a header from the response's declared MIME type (`audio/wav` versus `audio/l16` / raw PCM) or from the first four bytes reading `RIFF`, not from the model name, and still wraps headerless PCM (older models, streaming) when it gets it",
+      "Stitches the lesson from decoded PCM frames of each clip (for example with the `wave` module) rather than by slicing a fixed 44 bytes off concatenated files"
+    ]
+  }
+]
